@@ -121,6 +121,23 @@ df = load_data()
 
 df = df.iloc[:, 1:]
 
+# -----------------------------------------#
+#           Sidebar Legend Sec.            #
+# -----------------------------------------#
+
+with st.sidebar:
+    st.header('Analytics Legend')
+    with st.expander('What do these X & Y figures mean?'):
+        # Using st.markdown with triple quotes for multi-line text
+        st.markdown("""
+        The values shown are **Delta Metrics**. They represent how much better or worse a player performs compared to the average player in their specific conference.
+        
+        + **Positive (+):** Performance exceeding the conference environment baseline.
+        + **Negative (-):** Performance trailing the conference baseline.
+
+        This standardization allows us to compare a player in **Hockey East** directly with one in the **Big Ten** without "conference bias."
+        """)
+    st.divider()
 
 # -----------------------------------------#
 #             Filter/Sidebar Sec.          #
@@ -178,7 +195,7 @@ with tab1:
     st.markdown('## Metric Comparison')
 
     numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
-    stats_cols = [col for col in numeric_cols if col not in ['player', 'team', 'conference', 'position']]
+    stats_cols = [col for col in numeric_cols if col not in ['player', 'team', 'conference', 'position', 'toi_(min)']]
 
     col1, col2 = st.columns(2)
     with col1:
@@ -187,7 +204,8 @@ with tab1:
             options=stats_cols, 
             key='x_stat_state' 
         )
-    y_stat = st.selectbox(
+    with col2:
+        y_stat = st.selectbox(
             "Y-Axis Statistic", 
             options=stats_cols, 
             key='y_stat_state' 
@@ -236,6 +254,52 @@ with tab1:
     else:
         st.warning('No Players match the selected filters. Please adjust your criteria.')
 
+# -----------------------------------------#
+#        Dynamic Interpretation             # 
+# -----------------------------------------#
+
+st.divider()
+
+st.subheader(f'Techincal Interpretation: {x_stat} vs {y_stat}')
+analysis_player = st.selectbox(
+    'Select a player for a detailed context:',
+    options=filtered_df['player'].unique(),
+    index=0 if not filtered_df.empty else None
+)
+
+if analysis_player:
+    player_row = filtered_df[filtered_df['player'] == analysis_player].iloc[0]
+    val_x = player_row[x_stat]
+    val_y = player_row[y_stat]
+
+    def get_direction(val):
+        return 'above' if val >= 0 else 'below'
+    
+    def get_sentiment(val):
+        return 'elite' if abs(val) > 1.5 else 'below'
+    
+    with st.expander(f'Detailed Breakdown for {analysis_player}', expanded=True):
+        col_x, col_y = st.columns(2)
+    
+        with col_x:
+            st.metric(label=f'**{x_stat}**', value=f'{val_x:+.3f}')
+            st.write(f'''
+                    **{analysis_player}** is averaging **{abs(val_x):.3f}** {x_stat.replace('_', ' ')} 
+                    **{get_direction(val_x)}** the conference-adjusted baseline. This indicates a **{get_sentiment(val_x)} efficiency
+                    in this category relative to their peers in the {player_row['conference']}.          
+''')
+        with col_y:
+            st.metric(label=f'**{y_stat}**', value=f'{val_x:+.3f}')
+            st.write(f'''
+                    Regarding {y_stat.replace('_', ' ')}, they are performing {abs(val_y):.3f} units 
+                    **{get_direction(val_y)}** the expected mean.
+                    
+                    **The Context:** When standardized for conference style, this player's {y_stat.replace('_', ' ')} 
+                    suggests they are {'a primary driver' if val_y > 1.0 else 'a system-dependent contributor'} 
+                    in this specific facet of the game.
+''')
+            st.info(f'These figures are neutralized for conference-specific pace and style of play.'
+                    f"A score of 0.000 represents the exact average for the {player_row['conference']}.")
 
 
 # -----------------------------------------#
@@ -283,3 +347,4 @@ with tab2:
         }, inplace=True)
         
         st.dataframe(display_df, hide_index=True, use_container_width=True)
+
